@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #define WORDLE (5)
 #define ELEMENT_LENGTH (WORDLE + 1)
@@ -19,7 +20,6 @@ char wordleGuesser(
 	char autoBlack, char* blackList, char* yellowList, char* yellowLock, char* greenLock)
 {
 	char hasResult = 0;
-	// for 0 repeated, 1 repeated, 2 repeated, ...
 	unsigned short bestNthWordle[WORDLE] = { 0 };
 	int bestScore[WORDLE] = { 0 };
 
@@ -27,7 +27,7 @@ char wordleGuesser(
 	for (unsigned short nthWordle = 0; dataset[nthWordle][0]; ++nthWordle)
 	{
 		int currScore = 0;
-		char letterCount['z' + 1] = { 0 }, currMaxRepeat = 0, isValid = 1;
+		char letterCount['z' + 1] = { 0 }, isValid = 1;
 		for (char i = 0; i < WORDLE; ++i)
 		{
 			if (
@@ -39,22 +39,31 @@ char wordleGuesser(
 				isValid = 0;
 			}
 
-			if (++letterCount[dataset[nthWordle][i]] > currMaxRepeat) {
-				currMaxRepeat = letterCount[dataset[nthWordle][i]];
-			}
 			currScore += yellowList[dataset[nthWordle][i]] ?
-				2 * POSSIBLE_WORDLE : alphCount[dataset[nthWordle][i]];
+				2 * POSSIBLE_WORDLE : (alphCount[dataset[nthWordle][i]] * 
+					(letterCount[dataset[nthWordle][i]]? 0 : 1)
+			);
+			++letterCount[dataset[nthWordle][i]];
 		}
 
 		currScore *= isValid;
-		if (currScore > bestScore[currMaxRepeat])
+		for (int j = 0; j < WORDLE; ++j)
 		{
-			bestScore[currMaxRepeat] = currScore;
-			bestNthWordle[currMaxRepeat] = nthWordle;
+			if (currScore > bestScore[j])
+			{
+				for (int k = WORDLE - 1; k > j; --k)
+				{
+					bestScore[k] = bestScore[k - 1];
+					bestNthWordle[k] = bestNthWordle[k - 1];
+				}
+				bestScore[j] = currScore;
+				bestNthWordle[j] = nthWordle;
+				break;
+			}
 		}
 	}
 
-	for (char rpt = 1; rpt < WORDLE; ++rpt)
+	for (char rpt = 0; rpt < WORDLE; ++rpt)
 	{
 		if (!bestScore[rpt]) { continue; }
 		if (autoBlack)
@@ -62,7 +71,7 @@ char wordleGuesser(
 			// exclude those letters, so we can find five new letters next time
 			for (char i = 0; i < WORDLE; ++i) { blackList[dataset[bestNthWordle[rpt]][i]] = 1; }
 		}
-		printf("%d\t%s\t\t%d\n", rpt, dataset[bestNthWordle[rpt]], bestScore[rpt]);
+		printf("%d\t%s\t\t%d\n", rpt + 1, dataset[bestNthWordle[rpt]], bestScore[rpt]);
 		hasResult = 1;
 	}
 	puts("");
@@ -80,7 +89,7 @@ int main()
 	if (fin)
 	{
 		for (unsigned short nthWordle = 0; 
-			fread_s(dataset[nthWordle], BUFFER_SIZE, sizeof(char), ELEMENT_LENGTH, fin);
+			fread(dataset[nthWordle], sizeof(char), ELEMENT_LENGTH, fin);
 			++nthWordle)
 		{
 			if (errno) { handleErr(errno); }
@@ -107,7 +116,7 @@ int main()
 		"\t[1-5]=[a-z]:\tLock (Green)\n"
 		"========================================\n"
 		"Repeat\tBest Wordle\tScore\n");
-	do
+	while (1)
 	{
 		char c = '\0', mode = getc(stdin);
 
@@ -136,8 +145,9 @@ int main()
 
 		default: printf("?"); continue; // continue the do-while loop
 		}
-		puts("");
-	} while (wordleGuesser(alphCount, dataset, 0, blackList, yellowList, yellowLock, greenLock));
+
+		if (!wordleGuesser(alphCount, dataset, 0, blackList, yellowList, yellowLock, greenLock)) { break; }
+	}
 
 	return 0;
 }
